@@ -93,7 +93,7 @@ internal class GuideMediaItem(private val guideItem: GuideItem): BaseMediaItem()
 internal class TabMediaItem(private val tabItem: TabRenderer, private val groupType: Int): BaseMediaItem() {
     override val titleItem by lazy { tabItem.getTitle() }
     override val reloadPageKeyItem by lazy { tabItem.getReloadToken() }
-    //override val channelIdItem by lazy { tabItem.getBrowseId() }
+    override val channelIdItem by lazy { tabItem.getChannelId() } // MEETUBE(issue #247): from the tab's params; Auto-download's channel picker needs it
     //override val playlistParamsItem by lazy { tabItem.getBrowseParams() }
     override val cardThumbImageUrl by lazy { tabItem.getThumbnails()?.getOptimalResThumbnailUrl() }
     override val backgroundThumbImageUrl by lazy { tabItem.getThumbnails()?.getHighResThumbnailUrl() }
