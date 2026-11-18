@@ -1,12 +1,14 @@
 package com.liskovsoft.googlecommon.common.locale;
 
-import android.os.Build.VERSION;
 import com.liskovsoft.sharedutils.locale.LocaleUpdater;
 import com.liskovsoft.sharedutils.locale.LocaleUtility;
 import com.liskovsoft.sharedutils.prefs.GlobalPreferences;
 
+import java.util.Arrays;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.Locale;
+import java.util.Set;
 import java.util.TimeZone;
 
 public class LocaleManager {
@@ -60,16 +62,45 @@ public class LocaleManager {
 
     private void initLang() {
         Locale locale = getLocale();
-
-        if (VERSION.SDK_INT >= 21) {
-            // Use BCP-47 code for language code to get content with correct language.
-            // For example, BCP-47 has zn-CN for simplified Chinese and zh-TW for traditional Chinese.
-            mLang = locale.toLanguageTag();
-        } else {
-            mLang = locale.getLanguage();
-        }
-
+        mLang = youTubeLanguage(locale);
         mCountry = locale.getCountry();
+    }
+
+    /** YouTube's own hl codes: every one measured to answer 200 (2026-11-18). */
+    private static final Set<String> YOUTUBE_LANGUAGES = new HashSet<>(Arrays.asList(
+            "af", "am", "ar", "as", "az", "be", "bg", "bn", "bs", "ca", "cs", "da", "de", "el", "en", "en-GB",
+            "en-IN", "es", "es-419", "es-US", "et", "eu", "fa", "fi", "fil", "fr", "fr-CA", "gl", "gu", "hi",
+            "hr", "hu", "hy", "id", "is", "it", "iw", "ja", "ka", "kk", "km", "kn", "ko", "ky", "lo", "lt",
+            "lv", "mk", "ml", "mn", "mr", "ms", "my", "ne", "nl", "no", "or", "pa", "pl", "pt", "pt-PT", "ro",
+            "ru", "si", "sk", "sl", "sq", "sr", "sr-Latn", "sv", "sw", "ta", "te", "th", "tr", "uk", "ur", "uz",
+            "vi", "zh-CN", "zh-HK", "zh-TW", "zu"));
+
+    /**
+     * The phone's locale as an hl YouTube takes. A raw BCP-47 tag is refused with HTTP 400 when its
+     * region is not one YouTube offers (en-SA, en-CA, de-AT, fr-BE...), and so is a language it does not
+     * support at all (cy, ga...): every request failed on such a phone (issue #263).
+     */
+    static String youTubeLanguage(Locale locale) {
+        String lang = locale.getLanguage();
+        String country = locale.getCountry();
+        switch (lang) {
+            case "he": lang = "iw"; break;
+            case "in": lang = "id"; break;
+            case "nb": case "nn": lang = "no"; break;
+            case "tl": lang = "fil"; break;
+            case "zh":
+                if ("HK".equals(country) || "MO".equals(country)) return "zh-HK";
+                return "TW".equals(country) || "Hant".equals(locale.getScript()) ? "zh-TW" : "zh-CN";
+            case "es":
+                if (!country.isEmpty() && !"ES".equals(country) && !"US".equals(country)) return "es-419";
+                break;
+            case "sr":
+                if ("Latn".equals(locale.getScript())) return "sr-Latn";
+                break;
+        }
+        String tag = lang + "-" + country;
+        if (YOUTUBE_LANGUAGES.contains(tag)) return tag;
+        return YOUTUBE_LANGUAGES.contains(lang) ? lang : "en";
     }
 
     private void initUtcOffset() {
