@@ -33,6 +33,9 @@ internal object TclChallengeProvider {
     private var v8Runtime: V8? = null
     private val v8Lock = Any()
     private const val cacheSection = "tcl-challenge-solver"
+    // MEETUBE: the player whose n-function the kept runtime has compiled (tclSolveCached).
+    // Rebuilding the runtime and recompiling the player cost 1.3-2.3 s per video on a 32-bit TV.
+    private var compiledFor: String? = null
 
     private data class SolverOutput(val type: String?, val results: Map<String, String>?, val error: String?, val preprocessed_player: String?)
 
@@ -42,7 +45,13 @@ internal object TclChallengeProvider {
      * @param nParams bare n-parameter values (as seen in a stream url's "n" query param)
      * @return map from each input nParam to its decoded value, or null for one that failed
      */
-    fun solveN(playerUrl: String, playerCode: String, nParams: List<String>): Map<String, String?> {
+    // MEETUBE: one solve at a time, so a second caller (startup warm-up vs the first video) waits and
+    // reuses the compiled n-function instead of compiling it again in parallel
+    fun solveN(playerUrl: String, playerCode: String, nParams: List<String>): Map<String, String?> = synchronized(v8Lock) {
+        solveNSync(playerUrl, playerCode, nParams)
+    }
+
+    private fun solveNSync(playerUrl: String, playerCode: String, nParams: List<String>): Map<String, String?> {
         if (nParams.isEmpty()) {
             return emptyMap()
         }
@@ -53,6 +62,21 @@ internal object TclChallengeProvider {
         val challengeByParam = nParams.distinct().associateWith { "https://www.youtube.com/videoplayback?n=$it" }
 
         val cacheKey = "player:$playerUrl"
+
+        val stdout = try {
+            initRuntime()
+            if (compiledFor == playerUrl)
+                runV8("JSON.stringify(tclSolveCached(${Gson().toJson(challengeByParam.values.toList())}));")
+            else
+                null
+        } catch (e: Exception) {
+            Log.e(tag, "TCL cached n-function solve failed: ${e.message}")
+            disposeRuntime()
+            null
+        }
+
+        stdout?.let { parseOutput(it, nParams, challengeByParam) }?.let { return it }
+
         val cachedPreprocessed = CacheService.load(cacheSection, cacheKey)?.code
 
         val request = if (cachedPreprocessed != null) {
@@ -72,20 +96,18 @@ internal object TclChallengeProvider {
 
         val stdin = "JSON.stringify(tclSolver(${Gson().toJson(request)}));"
 
-        val stdout = try {
-            synchronized(v8Lock) {
-                initRuntime()
-                val result = runV8(stdin)
-                shutdownIfNeeded()
-                result
-            }
+        val fullStdout = try {
+            compiledFor = null
+            initRuntime()
+            runV8(stdin)
         } catch (e: Exception) {
             Log.e(tag, "TCL n-function solve failed: ${e.message}")
+            disposeRuntime()
             return nParams.associateWith { null }
         }
 
         val output: SolverOutput = try {
-            Gson().fromJson(stdout, solverOutputType)
+            Gson().fromJson(fullStdout, solverOutputType)
         } catch (e: JsonSyntaxException) {
             Log.e(tag, "Cannot parse TCL solver output: ${e.message}")
             return nParams.associateWith { null }
@@ -101,9 +123,20 @@ internal object TclChallengeProvider {
         }
 
         output.preprocessed_player?.let { CacheService.store(cacheSection, cacheKey, CachedData(it)) }
+        if (v8Runtime != null) compiledFor = playerUrl
 
         val results = output.results ?: emptyMap()
 
+        return nParams.associateWith { param -> results[challengeByParam[param]] }
+    }
+
+    private fun parseOutput(stdout: String, nParams: List<String>, challengeByParam: Map<String, String>): Map<String, String?>? {
+        val output = try {
+            Gson().fromJson<SolverOutput>(stdout, solverOutputType)
+        } catch (e: JsonSyntaxException) {
+            null
+        } ?: return null
+        val results = output.results?.takeIf { output.type == "result" } ?: return null
         return nParams.associateWith { param -> results[challengeByParam[param]] }
     }
 
@@ -129,10 +162,13 @@ internal object TclChallengeProvider {
         """
     }
 
-    private fun shutdownIfNeeded() {
+    private fun disposeRuntime() {
+        compiledFor = null
         val runtime = v8Runtime ?: return
-        runtime.withLock {
-            it.release(false)
+        try {
+            runtime.withLock { it.release(false) }
+        } catch (e: Throwable) {
+            Log.e(tag, "TCL runtime release failed: ${e.message}")
         }
         v8Runtime = null
     }

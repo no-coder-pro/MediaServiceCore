@@ -27,7 +27,8 @@ public class VideoInfoService extends VideoInfoServiceBase {
     private static VideoInfoService sInstance;
     private final VideoInfoApi mVideoInfoApi;
     private boolean mUseAuth;
-    private List<TranslationLanguage> mCachedTranslationLanguages;
+    private volatile List<TranslationLanguage> mCachedTranslationLanguages;
+    private volatile boolean mIsTranslationFetchRunning;
     private boolean mIsRestrictedVideosAllowed = true;
 
     private VideoInfoService() {
@@ -184,17 +185,23 @@ public class VideoInfoService extends VideoInfoServiceBase {
         if (needMoreSubtitles(result)) {
             Log.d(TAG, "Enable full list of auto generated subtitles...");
 
-            if (mCachedTranslationLanguages == null || mCachedTranslationLanguages.size() < 100) {
-                mUseAuth = false;
-                VideoInfo webInfo = null;
-                try {
-                    webInfo = getVideoInfoReal(AppClient.WEB_DUMMY, videoId, clickTrackingParams);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-                if (webInfo != null) {
-                    mCachedTranslationLanguages = webInfo.getTranslationLanguages();
-                }
+            // MEETUBE: fetched in the background: the extra WEB /player call cost the first video ~1.2 s.
+            // That video keeps the client's own (shorter) list; the next ones get the full one.
+            if ((mCachedTranslationLanguages == null || mCachedTranslationLanguages.size() < 100) && !mIsTranslationFetchRunning) {
+                mIsTranslationFetchRunning = true;
+                new Thread(() -> {
+                    try {
+                        // WEB_DUMMY doesn't support auth, so mUseAuth doesn't matter here
+                        VideoInfo webInfo = getVideoInfoReal(AppClient.WEB_DUMMY, videoId, clickTrackingParams);
+                        if (webInfo != null) {
+                            mCachedTranslationLanguages = webInfo.getTranslationLanguages();
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    } finally {
+                        mIsTranslationFetchRunning = false;
+                    }
+                }).start();
             }
 
             if (mCachedTranslationLanguages != null) {

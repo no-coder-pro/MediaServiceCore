@@ -749,6 +749,7 @@ var tclSolver = (function (meriyah, astring) {
         ? input.preprocessed_player
         : preprocessPlayer(input.player);
       const nFunction = new Function(preprocessedPlayer)();
+      globalThis.tclNFunction = nFunction; // MEETUBE: kept for tclSolveCached
       const results = {};
       for (const challenge of input.challenges) {
         results[challenge] = nFunction(challenge);
@@ -768,3 +769,12 @@ var tclSolver = (function (meriyah, astring) {
 
   return main;
 })(meriyah, astring);
+
+// MEETUBE: solve with the n-function the last successful tclSolver call compiled (TclChallengeProvider keeps the runtime).
+function tclSolveCached(challenges) {
+  const results = {};
+  for (const challenge of challenges) {
+    results[challenge] = globalThis.tclNFunction(challenge);
+  }
+  return { type: "result", results: results };
+}

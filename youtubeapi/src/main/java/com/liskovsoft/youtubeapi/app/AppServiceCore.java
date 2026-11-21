@@ -155,7 +155,16 @@ class AppServiceCore {
     public void warmUpCacheIfNeeded(@Nullable AppClient client) {
         getAppInfoData();
         getClientData();
-        getPlayerDataExtractor(client);
+        PlayerDataExtractor extractor = getPlayerDataExtractor(client);
+        // MEETUBE: mint the TV poToken (WebView + BotGuard, ~3 s) and compile the TCL n-function (~2 s,
+        // its solver keeps the runtime) side by side now, so the first video doesn't wait for either
+        if (client != null && client.isTvPotRequired()) {
+            AppClient potClient = client;
+            new Thread(() -> PoTokenGate.getPoToken(potClient)).start();
+        }
+        if (extractor instanceof TclPlayerDataExtractor) {
+            extractor.extractNSig("5cNpZqIJ7ixNqU68Y7S");
+        }
     }
 
     protected MediaServiceData getData() {
