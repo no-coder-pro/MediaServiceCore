@@ -142,7 +142,11 @@ internal open class BrowseService2 {
             SubscribedChannelAvatars.put(it.getTabs(), avatarsGeneration)
 
             // Prepare to move LIVE items to the top. Multiple results should be combined first.
-            val (overrideItems, overrideKey) = continueIfNeededTV(it.getItems(), it.getContinuationToken(), options)
+            // MEETUBE(issue #328): the feed's items are its 3-wide rows only, so the Shorts shelf never
+            // reached the phone's Shorts pill. Its Shorts follow the first page's videos.
+            val shorts = if (options.removeShorts) null else it.getShortItems()
+            val items = if (shorts.isNullOrEmpty()) it.getItems() else (it.getItems() ?: emptyList()) + shorts
+            val (overrideItems, overrideKey) = continueIfNeededTV(items, it.getContinuationToken(), options)
 
             BrowseMediaGroupTV(it, options, overrideItems = overrideItems, overrideKey = overrideKey)
         }
