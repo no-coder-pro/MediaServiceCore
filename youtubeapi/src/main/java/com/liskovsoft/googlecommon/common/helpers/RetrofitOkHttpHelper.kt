@@ -81,6 +81,7 @@ internal object RetrofitOkHttpHelper {
         "/youtubei/v1/reel/",
         "/youtubei/v1/next",
         "/api/stats/",
+        "/youtubei/v1/history/", // signed out, pause/resume/clear act on this visitor's history (MeeTube #340)
     )
 
     private val tParamSuffixes = listOf("/browse", "/next", "/reel", "/playlist")
