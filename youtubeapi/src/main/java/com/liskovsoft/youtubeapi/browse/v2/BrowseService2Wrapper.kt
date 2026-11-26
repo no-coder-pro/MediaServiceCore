@@ -154,7 +154,9 @@ internal object BrowseService2Wrapper: BrowseService2() {
                         videoId = it.videoId
                         channelId = it.channelId
                         playlistId = reloadPageKey
-                        badgeText = it.badge
+                        // MEETUBE: a saved video has no duration, so a worded badge (a live video saved
+                        // with "13 videos") made it a Mix card that reopened the playlist. Keep durations only.
+                        badgeText = it.badge?.takeIf { b -> b.matches(Regex("[\\d:]+")) }
                     }
                 }
             }
