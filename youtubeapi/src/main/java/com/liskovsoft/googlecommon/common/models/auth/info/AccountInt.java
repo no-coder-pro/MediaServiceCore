@@ -28,7 +28,10 @@ public class AccountInt {
     @JsonPath("$.hasChannel")
     private boolean mHasChannel;
 
-    @JsonPath("$.serviceEndpoint.selectActiveIdentityEndpoint.supportedTokens[*].pageIdToken.pageId")
+    @JsonPath({
+            "$.serviceEndpoint.selectActiveIdentityEndpoint.supportedTokens[*].pageIdToken.pageId",
+            "$.serviceEndpoint.selectActiveIdentityEndpoint.supportedTokens[*].accountStateToken.obfuscatedGaiaId"
+    })
     private List<String> mPageIdTokens;
 
     public String getName() {

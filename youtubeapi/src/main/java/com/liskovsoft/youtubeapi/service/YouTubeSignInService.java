@@ -245,6 +245,7 @@ public class YouTubeSignInService implements SignInService {
     @Override
     public synchronized void selectAccount(Account account) {
         mAccountManager.selectAccount(account);
+        syncWithRetrofit();
     }
 
     @Override
